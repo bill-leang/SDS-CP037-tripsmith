@@ -1,0 +1,7 @@
+# API Keys - Copy this file to .env and fill in your actual keys
+OPENAI_API_KEY=your_openai_api_key_here
+TAVILY_API_KEY=your_tavily_api_key_here
+SERPAPI_API_KEY=your_serpapi_key_here
+
+# Optional: Set to True for debug mode
+DEBUG=False
