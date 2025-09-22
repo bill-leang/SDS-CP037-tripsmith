@@ -208,6 +208,37 @@ def display_itinerary(itinerary: TravelItinerary):
     with col4:
         st.metric("Budget", f"${itinerary.budget:,.0f}")
     
+    # Flight Information
+    if itinerary.flights:
+        st.markdown("**✈️ Flight Options**")
+        for i, flight in enumerate(itinerary.flights, 1):
+            st.markdown(f"""
+            <div class="activity-item">
+                <strong>Option {i}: {flight.airline} {flight.flight_number}</strong><br>
+                <strong>Route:</strong> {flight.departure_airport} → {flight.arrival_airport}<br>
+                <strong>Departure:</strong> {flight.departure_time}<br>
+                <strong>Arrival:</strong> {flight.arrival_time}<br>
+                <strong>Duration:</strong> {flight.duration}<br>
+                <small>💰 ${flight.price:.2f} | Stops: {flight.stops}</small>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("---")
+    
+    # Hotel Information
+    if itinerary.hotels:
+        st.markdown("**🏨 Hotel Options**")
+        for i, hotel in enumerate(itinerary.hotels, 1):
+            st.markdown(f"""
+            <div class="activity-item">
+                <strong>Option {i}: {hotel.name}</strong><br>
+                <strong>Address:</strong> {hotel.address}<br>
+                <strong>Location:</strong> {hotel.city}, {hotel.country}<br>
+                <strong>Rating:</strong> ⭐ {hotel.rating}/5<br>
+                <small>💰 ${hotel.price_per_night:.2f}/night | Amenities: {', '.join(hotel.amenities[:3])}</small>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("---")
+    
     # Daily itinerary
     for i, day in enumerate(itinerary.days, 1):
         st.markdown(f"""

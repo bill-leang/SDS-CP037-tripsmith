@@ -34,7 +34,7 @@ class ItineraryGenerator:
         
         # Parse and structure the response
         itinerary = self._parse_itinerary_response(itinerary_data, destination, 
-                                                 start, end, budget, travelers)
+                                                 start, end, budget, travelers, travel_data)
         
         return itinerary
     
@@ -42,6 +42,11 @@ class ItineraryGenerator:
                         budget: float, travelers: int, preferences: Dict[str, Any],
                         travel_data: Dict[str, Any]) -> str:
         """Prepare context for LLM prompt."""
+        
+        # Calculate duration
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+        duration = (end - start).days
         
         context = f"""
         Generate a detailed travel itinerary for {travelers} traveler(s) visiting {destination}
@@ -76,13 +81,15 @@ class ItineraryGenerator:
         
         context += f"""
         
-        Please generate a day-by-day itinerary that includes:
-        1. Daily activities and attractions
-        2. Meal recommendations (breakfast, lunch, dinner)
-        3. Transportation between locations
+        Please generate a COMPLETE day-by-day itinerary for ALL {duration} days that includes:
+        1. Daily activities and attractions for each day
+        2. Meal recommendations (breakfast, lunch, dinner) for each day
+        3. Transportation between locations for each day
         4. Estimated costs for each day
         5. Time allocations for each activity
         6. Practical tips and recommendations
+        
+        IMPORTANT: Generate exactly {duration} days of itinerary, one for each day from {start_date} to {end_date}.
         
         Format the response as a JSON object with the following structure:
         {{
@@ -218,36 +225,112 @@ class ItineraryGenerator:
     
     def _parse_itinerary_response(self, data: Dict[str, Any], destination: str,
                                  start_date: date, end_date: date, budget: float,
-                                 travelers: int) -> TravelItinerary:
+                                 travelers: int, travel_data: Dict[str, Any] = None) -> TravelItinerary:
         """Parse LLM response into TravelItinerary object."""
         
         itinerary_data = data.get('itinerary', {})
         days_data = itinerary_data.get('days', [])
         
+        # Calculate total duration
+        total_days = (end_date - start_date).days
+        
         # Create day itineraries
         days = []
         current_date = start_date
         
-        for day_data in days_data:
-            day_itinerary = DayItinerary(
-                date=current_date,
-                city=day_data.get('city', destination),
-                activities=day_data.get('activities', []),
-                meals=day_data.get('meals', []),
-                transportation=day_data.get('transportation', [])
-            )
+        # Ensure we have exactly the right number of days
+        for i in range(total_days):
+            if i < len(days_data):
+                # Use LLM-generated data if available
+                day_data = days_data[i]
+                day_itinerary = DayItinerary(
+                    date=current_date,
+                    city=day_data.get('city', destination),
+                    activities=day_data.get('activities', []),
+                    meals=day_data.get('meals', []),
+                    transportation=day_data.get('transportation', [])
+                )
+            else:
+                # Create placeholder day if LLM didn't generate enough days
+                day_itinerary = DayItinerary(
+                    date=current_date,
+                    city=destination,
+                    activities=[{
+                        "time": "09:00",
+                        "activity": "Free Day",
+                        "description": "Explore the city at your own pace",
+                        "duration": "Flexible",
+                        "cost": 0.0,
+                        "location": destination
+                    }],
+                    meals=[],
+                    transportation=[]
+                )
+            
             days.append(day_itinerary)
             current_date += timedelta(days=1)
+        
+        # Process flights from travel data
+        flights = []
+        if travel_data and travel_data.get('flights'):
+            for flight_data in travel_data['flights']:
+                flight = Flight(
+                    airline=flight_data.get('airline', 'Unknown'),
+                    departure_airport=flight_data.get('departure_airport', 'Unknown'),
+                    arrival_airport=flight_data.get('arrival_airport', 'Unknown'),
+                    departure_time=flight_data.get('departure_time', 'Unknown'),
+                    arrival_time=flight_data.get('arrival_time', 'Unknown'),
+                    duration=flight_data.get('duration', 'Unknown'),
+                    price=flight_data.get('price', 0.0),
+                    flight_number=flight_data.get('flight_number', 'Unknown'),
+                    stops=flight_data.get('stops', 0)
+                )
+                flights.append(flight)
+        
+        # Process hotels from travel data
+        hotels = []
+        if travel_data and travel_data.get('hotels'):
+            for hotel_data in travel_data['hotels']:
+                hotel = Hotel(
+                    name=hotel_data.get('name', 'Unknown'),
+                    address=hotel_data.get('address', 'Unknown'),
+                    city=hotel_data.get('city', destination),
+                    country=hotel_data.get('country', 'Unknown'),
+                    price_per_night=hotel_data.get('price_per_night', 0.0),
+                    rating=hotel_data.get('rating', 0.0),
+                    amenities=hotel_data.get('amenities', [])
+                )
+                hotels.append(hotel)
+        
+        # Process POIs from travel data
+        pois = []
+        if travel_data and travel_data.get('pois'):
+            for poi_data in travel_data['pois']:
+                poi = PointOfInterest(
+                    name=poi_data.get('name', 'Unknown'),
+                    description=poi_data.get('description', 'No description'),
+                    category=poi_data.get('category', 'Attraction'),
+                    address=poi_data.get('address', 'Unknown'),
+                    city=poi_data.get('city', destination),
+                    country=poi_data.get('country', 'Unknown'),
+                    rating=poi_data.get('rating', 0.0),
+                    price_range=poi_data.get('price_range', 'Unknown'),
+                    opening_hours=poi_data.get('opening_hours', 'Unknown')
+                )
+                pois.append(poi)
         
         # Create main itinerary
         itinerary = TravelItinerary(
             destination=destination,
             start_date=start_date,
             end_date=end_date,
-            duration_days=(end_date - start_date).days,
+            duration_days=total_days,
             budget=budget,
             travelers=travelers,
-            days=days
+            days=days,
+            flights=flights,
+            hotels=hotels,
+            points_of_interest=pois
         )
         
         return itinerary
